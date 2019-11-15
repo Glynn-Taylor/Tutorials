@@ -1,0 +1,117 @@
+﻿using System.Collections.Generic;
+using UnityEngine;
+
+[ExecuteAlways]
+public class LightingManagerGI : MonoBehaviour
+{
+    [SerializeField] private Light DirectionalLight;
+    [SerializeField] private LightingPresetGI Preset;
+    //Variables
+    [SerializeField, Range(0, 24)] private float TimeOfDay;
+    [SerializeField] private Material skyMaterial;
+
+    private ReflectionProbe[] probes;
+
+    private List<MaterialGI> materials = new List<MaterialGI>();
+
+
+    private void OnEnable()
+    {
+        probes = FindObjectsOfType<ReflectionProbe>();
+    }
+
+    public void RegisterMaterial(MaterialGI mgi)
+    {
+        if (materials.Contains(mgi) == false)
+        {
+            materials.Add(mgi);
+        }
+    }
+
+    public void DeregisterMaterial(MaterialGI mgi)
+    {
+        if (materials.Contains(mgi) == true)
+        {
+            materials.Remove(mgi);
+        }
+    }
+
+    private void Update()
+    {
+        if (Preset == null)
+            return;
+
+        if (Application.isPlaying)
+        {
+            //(Replace with a reference to the game time)
+            TimeOfDay += Time.deltaTime * 2.5f;
+            TimeOfDay %= 24; //Modulus to ensure always between 0-24
+            UpdateLighting(TimeOfDay / 24f);
+        }
+        else
+        {
+
+            UpdateLighting(TimeOfDay / 24f);
+        }
+    }
+
+
+
+
+    private void UpdateLighting(float timePercent)
+    {
+        if (skyMaterial != null)
+            skyMaterial.SetColor("_Tint", Preset.SkyboxColor.Evaluate(timePercent));
+
+        RenderSettings.fogColor = Preset.FogColor.Evaluate(timePercent);
+
+        //If the directional light is set then rotate and set it's color, I actually rarely use the rotation because it casts tall shadows unless you clamp the value
+        if (DirectionalLight != null)
+        {
+            DirectionalLight.color = Preset.DirectionalColor.Evaluate(timePercent);
+
+            //DirectionalLight.transform.localRotation = Quaternion.Euler(new Vector3((timePercent * 360f) - 90f, 170f, 0));
+        }
+        if (probes != null)
+        {
+            foreach (ReflectionProbe probe in probes)
+            {
+                probe.RenderProbe();
+            }
+        }
+
+        foreach (MaterialGI mat in materials)
+        {
+            mat.UpdateGI(TimeOfDay / 24f);
+        }
+
+    }
+
+
+
+    //Try to find a directional light to use if we haven't set one
+    private void OnValidate()
+    {
+        if (DirectionalLight != null)
+            return;
+
+        //Search for lighting tab sun
+        if (RenderSettings.sun != null)
+        {
+            DirectionalLight = RenderSettings.sun;
+        }
+        //Search scene for light that fits criteria (directional)
+        else
+        {
+            Light[] lights = GameObject.FindObjectsOfType<Light>();
+            foreach (Light light in lights)
+            {
+                if (light.type == LightType.Directional)
+                {
+                    DirectionalLight = light;
+                    return;
+                }
+            }
+        }
+    }
+}
